@@ -37,23 +37,46 @@ final class MainViewController: UIViewController, UIPopoverPresentationControlle
     }
     
     private func configureNavigationItems() {
-        title = Constants.title
+        let titleLabel = UILabel().then {
+            $0.text = Constants.title
+            $0.font = .preferredFont(forTextStyle: .headline)
+        }
+        
+        let networkIcon = UIView(frame: .zero).then {
+            $0.backgroundColor = .systemRed
+            $0.layer.cornerRadius = 5
+        }
+
+        let baseStackView = UIStackView(arrangedSubviews: [titleLabel, networkIcon]).then {
+            $0.axis = .horizontal
+            $0.alignment = .center
+            $0.spacing = 5
+        }
+        
+        navigationItem.titleView = baseStackView
+        networkIcon.snp.makeConstraints {
+            $0.height.width.equalTo(titleLabel.snp.height).offset(-10)
+        }
+        
         let plusButton = UIBarButtonItem(
             image: UIImage(systemName: Constants.plus),
             style: .plain,
             target: self,
             action: #selector(showNewFormSheetView)
         )
+
         navigationItem.rightBarButtonItem = plusButton
     }
     
     private func bind() {
+        bindNetworkIconState()
         bindcellItems()
         bindHeaderViewLabels()
         bindItemsSelected()
         bindItemsDeleted()
         bindLongPressGestures()
         bindErrorAlert()
+        bindUndoRedoButtons()
     }
     
     private func cell(
@@ -112,11 +135,33 @@ final class MainViewController: UIViewController, UIPopoverPresentationControlle
         editFormSheet.modalPresentationStyle = .formSheet
         present(editFormSheet, animated: true)
     }
+    
+    private func initializeUndoRedoButtons() {
+        mainView.footerView.undoButton.isEnabled = true
+        mainView.footerView.redoButton.isEnabled = false
+    }
 }
 
 // MARK: - bind Funciton
 
 extension MainViewController {
+    
+    private func bindNetworkIconState() {
+        guard let networkIcon = navigationItem.titleView?.subviews[1] else {
+            return
+        }
+        viewModel.online
+            .map { online in
+                if online {
+                    return UIColor.systemGreen
+                } else {
+                    return UIColor.systemRed
+                }
+            }
+            .bind(to: networkIcon.rx.backgroundColor)
+            .disposed(by: disposeBag)
+        
+    }
     
     private func bindcellItems() {
         viewModel.todos
@@ -234,11 +279,36 @@ extension MainViewController {
                 .disposed(by: disposeBag)
         }
     }
+    
+    private func bindUndoRedoButtons() {
+        viewModel.undoable
+            .map({ Bool($0) })
+            .bind(to: mainView.footerView.undoButton.rx.isEnabled)
+            .disposed(by: disposeBag)
+        
+        viewModel.redoable
+            .map({ Bool($0) })
+            .bind(to: mainView.footerView.redoButton.rx.isEnabled)
+            .disposed(by: disposeBag)
+        
+        mainView.footerView.undoButton.rx.tap
+            .subscribe { [weak self] _ in
+                self?.viewModel.undoButtonTapped()
+            }
+            .disposed(by: disposeBag)
+        
+        mainView.footerView.redoButton.rx.tap
+            .subscribe { [weak self] _ in
+                self?.viewModel.redoButtonTapped()
+            }
+            .disposed(by: disposeBag)
+    }
 }
 
 extension MainViewController: DataReloadable {
     func reloadData() {
         viewModel.fetchData()
+        initializeUndoRedoButtons()
     }
 }
 

@@ -6,9 +6,10 @@
 
 import UIKit
 
-class SceneDelegate: UIResponder, UIWindowSceneDelegate {
-
+class SceneDelegate: UIResponder, UIWindowSceneDelegate, UNUserNotificationCenterDelegate {
+    
     var window: UIWindow?
+    private let current = UNUserNotificationCenter.current()
 
     func scene(
         _ scene: UIScene,
@@ -17,7 +18,62 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     ) {
         guard let windowScene = (scene as? UIWindowScene) else { return }
         window = UIWindow(windowScene: windowScene)
-        window?.rootViewController = UINavigationController(rootViewController: MainViewController())
+        
+        let mainViewController = UINavigationController(rootViewController: MainViewController())
+        let splitViewController = UISplitViewController(style: .doubleColumn)
+        let historyTableViewController = UINavigationController(
+            rootViewController: HistoryViewController(style: .plain)
+        )
+        
+        splitViewController.viewControllers = [historyTableViewController, mainViewController]
+        splitViewController.preferredPrimaryColumnWidthFraction = 1/3
+        splitViewController.preferredDisplayMode = .secondaryOnly
+        splitViewController.preferredSplitBehavior = .overlay
+        
+        window?.rootViewController = splitViewController
         window?.makeKeyAndVisible()
+        
+        configureLocalNotification(viewController: mainViewController)
+    }
+    
+    private func configureLocalNotification(viewController: UIViewController) {
+        current.delegate = self
+        current.requestAuthorization(options: [.sound, .alert, .badge]) { isAllowed, _ in
+            if !isAllowed {
+                DispatchQueue.main.async {
+                    self.showAlert(viewController: viewController) { _ in
+                        self.showSettingURL()
+                    }
+                }
+            }
+        }
+    }
+    
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions
+        ) -> Void) {
+        completionHandler([.sound, .banner, .badge])
+    }
+    
+    private func showSettingURL() {
+        guard let settingURL = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(settingURL)
+    }
+    
+    private func showAlert(viewController: UIViewController, handler: @escaping ((UIAlertAction) -> Void)) {
+        let alert = UIAlertController(
+            title: AppConstants.notificationPermissionAlertTitle,
+            message: AppConstants.notificationPermissionAlertMessage,
+            preferredStyle: .alert
+        )
+        let okAction = UIAlertAction(
+            title: AppConstants.okActionTitle,
+            style: .default,
+            handler: handler
+        )
+        alert.addAction(okAction)
+        viewController.present(alert, animated: true)
     }
 }
